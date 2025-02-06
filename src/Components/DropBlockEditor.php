@@ -2,8 +2,14 @@
 
 namespace Jeffreyvr\DropBlockEditor\Components;
 
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Str;
 use Jeffreyvr\DropBlockEditor\Blocks\Block;
+use Jeffreyvr\DropBlockEditor\Events\BlockClone;
+use Jeffreyvr\DropBlockEditor\Events\BlockCloned;
+use Jeffreyvr\DropBlockEditor\Events\BlockDeleted;
+use Jeffreyvr\DropBlockEditor\Events\BlockInsert;
+use Jeffreyvr\DropBlockEditor\Events\BlockInserted;
 use Jeffreyvr\DropBlockEditor\Parsers\Parse;
 use Livewire\Component;
 
@@ -38,6 +44,8 @@ class DropBlockEditor extends Component
         'blockEditComponentUpdated' => 'blockUpdated',
         'refreshComponent' => '$refresh',
     ];
+
+    protected ?Dispatcher $events = null;
 
     public function canUndo(): bool
     {
@@ -124,9 +132,19 @@ class DropBlockEditor extends Component
     {
         $clone = $this->activeBlocks[$this->activeBlockIndex];
 
+        if ($this->events) {
+            $event = new BlockClone($clone);
+            $this->events->dispatch($event);
+            $clone = $event->getBlock();
+        }
+
         $this->activeBlocks[] = $clone;
 
         $this->activeBlockIndex = array_key_last($this->activeBlocks);
+
+        if ($this->events) {
+            $this->events->dispatch(new BlockCloned($this->activeBlocks[$this->activeBlockIndex]));
+        }
 
         $this->recordInHistory();
     }
@@ -137,7 +155,13 @@ class DropBlockEditor extends Component
 
         $this->activeBlockIndex = false;
 
+        $deleted = $this->activeBlocks[$activeBlockId];
+
         unset($this->activeBlocks[$activeBlockId]);
+
+        if ($this->events) {
+            $this->events->dispatch(new BlockDeleted($deleted));
+        }
 
         $this->recordInHistory();
     }
@@ -155,6 +179,11 @@ class DropBlockEditor extends Component
 
         return Block::fromName($this->activeBlocks[$this->activeBlockIndex]['class'])
             ->data($this->activeBlocks[$this->activeBlockIndex]['data']);
+    }
+
+    public function boot(?Dispatcher $events = null): void
+    {
+        $this->events = $events;
     }
 
     public function mount(): void
@@ -185,10 +214,20 @@ class DropBlockEditor extends Component
 
     public function insertBlock($id, $index = null, $placement = null): void
     {
-        if ($index === null) {
-            $block = $this->blocks[$id];
+        $block = $this->blocks[$id];
 
+        if ($this->events) {
+            $event = new BlockInsert($block);
+            $this->events->dispatch($event);
+            $block = $event->getBlock();
+        }
+
+        if ($index === null) {
             $this->activeBlocks[] = $block;
+
+            if ($this->events) {
+                $this->events->dispatch(new BlockInserted($block));
+            }
 
             return;
         }
@@ -199,7 +238,11 @@ class DropBlockEditor extends Component
             $newIndex = $index + 1;
         }
 
-        $this->activeBlocks = array_merge(array_slice($this->activeBlocks, 0, $newIndex), [$this->blocks[$id]], array_slice($this->activeBlocks, $newIndex));
+        $this->activeBlocks = array_merge(array_slice($this->activeBlocks, 0, $newIndex), [$block], array_slice($this->activeBlocks, $newIndex));
+
+        if ($this->events) {
+            $this->events->dispatch(new BlockInserted($block));
+        }
 
         $this->recordInHistory();
     }
