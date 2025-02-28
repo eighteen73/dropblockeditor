@@ -91,6 +91,10 @@ window.dropblockeditor = (config) => {
 
             root.querySelectorAll('[drag-item]').forEach(el => {
                 el.addEventListener('click', e => {
+                    root.querySelectorAll('[drag-item]').forEach((preview) => preview.classList.remove('block-active'))
+                    let clickedBlock = e.target.closest('[drag-item]');
+                    clickedBlock.classList.add('block-active');
+
                     Livewire.dispatch('blockEditComponentSelected', {
                         blockId: e.target.closest('[drag-item]').dataset.block
                     });
